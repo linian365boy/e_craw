@@ -2,16 +2,10 @@
 import datetime
 import random
 import csv
-
-import re
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.action_chains import ActionChains
 import time
 
-"""
-查询淘宝销量前几的商品，不分品类
-"""
 
 chrome_options = Options()
 # define headless
@@ -60,9 +54,11 @@ class Esales(object):
 
         # get catalogs_url catalogs
         driver.get(self.catalogs_url)
+        time.sleep(random.choice([1, 2, 3]))
         catalogs_eles = driver.find_elements_by_css_selector(
             '#zg_browseRoot > ul > li')
 
+        print('find {} catalogs'.format(len(catalogs_eles)))
         catalogs_count = 0
         for ele in catalogs_eles:
             if self.filter_href(ele):
@@ -85,16 +81,35 @@ class Esales(object):
                 except:
                     pass
             products_divs = driver.find_elements_by_xpath('//*[@id="zg-ordered-list"]/li')
-            row_dict = dict()
             product_count = 0
             for product_div in products_divs:
+                row_dict = {}.fromkeys(['catalog_name', 'product_name', 'product_url',
+                                        'product_stars', 'product_reviews', 'price', 'pic_url'], 'not found')
                 row_dict['catalog_name'] = catalog.catalog_name
-                row_dict['product_name'] = product_div.find_element_by_css_selector('div.p13n-sc-truncated').text
-                row_dict['product_url'] = product_div.find_element_by_css_selector('span.aok-inline-block > a.a-link-normal').get_attribute('href')
-                row_dict['product_stars'] = product_div.find_element_by_css_selector('div.a-icon-row a.a-link-normal').text
-                row_dict['product_reviews'] = product_div.find_element_by_css_selector('div.a-icon-row a.a-size-small').text
-                row_dict['price'] = product_div.find_element_by_css_selector('span.p13n-sc-price').text
-                row_dict['pic_url'] = product_div.find_element_by_css_selector('div.a-spacing-small').get_attribute('src')
+                try:
+                    row_dict['product_name'] = product_div.find_element_by_css_selector('div.p13n-sc-truncated').get_attribute('textContent')
+                except:
+                    pass
+                try:
+                    row_dict['product_url'] = product_div.find_element_by_css_selector('span.aok-inline-block > a.a-link-normal').get_attribute('href')
+                except:
+                    pass
+                try:
+                    row_dict['product_stars'] = product_div.find_element_by_css_selector('span.a-icon-alt').get_attribute('textContent')
+                except:
+                    pass
+                try:
+                    row_dict['product_reviews'] = product_div.find_element_by_css_selector('div.a-icon-row a.a-size-small').get_attribute('textContent')
+                except:
+                    pass
+                try:
+                    row_dict['price'] = product_div.find_element_by_css_selector('span.p13n-sc-price').get_attribute('textContent')
+                except:
+                    pass
+                try:
+                    row_dict['pic_url'] = product_div.find_element_by_css_selector('div.a-spacing-small img').get_attribute('src')
+                except:
+                    pass
                 try:
                     with open("{}.csv".format(self.csv_file_name), 'a+', encoding='utf-8', newline='') as f:
                         f_csv = csv.DictWriter(f, self.title_list)
@@ -121,7 +136,7 @@ if __name__ == '__main__':
     base_url = 'https://www.amazon.com'
     title = ['catalog_name', 'product_name', 'product_url', 'product_reviews', 'product_stars', 'price', 'pic_url']
     start = int(time.time() * 1000)
-    esales = Esales(catalogs_url, base_url, title, 3, 20)
+    esales = Esales(catalogs_url, base_url, title, -1, 15)
     esales.get_catalogs()
     esales.sales()
     print('create esale file cost time => {} ms'.format(int(time.time()) * 1000 - start))
