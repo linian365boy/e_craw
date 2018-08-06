@@ -35,6 +35,7 @@ class Esales(object):
 
     def get_children_catas(self, parent_url):
         self.count += 1
+        print('parent_url=>{}'.format(parent_url))
         driver.get(parent_url)
         # get the no.1 page products data
         for i in range(8):
@@ -44,15 +45,19 @@ class Esales(object):
             except:
                 pass
         parent_css_ul = '/ul'*(self.count-1)
-        css_ul = '/ul'*(self.count + 1)
+        css_ul = '/ul'*self.count
+        # //*[@id="zg_browseRoot"]/li/span
         parent_catalog_name = driver.find_element_by_xpath('//*[@id="zg_browseRoot"]'+parent_css_ul+'/li/span').text.strip()
+        # //*[@id="zg_browseRoot"]/ul/li[1]
         children_catalogs_eles = driver.find_elements_by_xpath('//*[@id="zg_browseRoot"]'+css_ul+'/li')
-        print('{} has {} children catalog'.format(parent_catalog_name, len(children_catalogs_eles)))
+        print('{} has {} children catalog, self.count=>{}'.format(parent_catalog_name, len(children_catalogs_eles), self.count))
         if len(children_catalogs_eles):
             for i, ele in enumerate(children_catalogs_eles):
+                print('css_ul=>{}'.format(css_ul))
                 self.get_children_catas(
-                    ele.find_element_by_xpath('//*[@id="zg_browseRoot"]'+css_ul+'/li['+(i+1)+']/a').get_attribute('url'))
+                    ele.find_element_by_xpath('//*[@id="zg_browseRoot"]'+css_ul+'/li/a').get_attribute('href'))
         else:
+            print('{} has no children catalog, self.count=>{}'.format(parent_catalog_name, self.count))
             return
 
     def get_catalogs(self, url):
