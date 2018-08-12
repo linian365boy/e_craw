@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 import random
-
+from selenium.webdriver.support import expected_conditions as EC
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
 import time
 from bs4 import BeautifulSoup
 import requests
+from selenium.webdriver.support.wait import WebDriverWait
+
 from e_amazon.craw_constant import headers_list
 
 
@@ -33,32 +36,44 @@ class Esales(object):
         self.catalogs = set()
         self.count = 0
 
-    def get_children_catas(self, parent_url):
-        self.count += 1
+    def get_children_catas(self, parent_url, loop_count):
         print('parent_url=>{}'.format(parent_url))
         driver.get(parent_url)
-        # get the no.1 page products data
         for i in range(8):
             js = "window.scrollTo(0,{})".format(i * 1000)
             try:
                 driver.execute_script(js)
             except:
                 pass
-        parent_css_ul = '/ul'*(self.count-1)
-        css_ul = '/ul'*self.count
-        # //*[@id="zg_browseRoot"]/li/span
-        parent_catalog_name = driver.find_element_by_xpath('//*[@id="zg_browseRoot"]'+parent_css_ul+'/li/span').text.strip()
-        # //*[@id="zg_browseRoot"]/ul/li[1]
-        children_catalogs_eles = driver.find_elements_by_xpath('//*[@id="zg_browseRoot"]'+css_ul+'/li')
-        print('{} has {} children catalog, self.count=>{}'.format(parent_catalog_name, len(children_catalogs_eles), self.count))
-        if len(children_catalogs_eles):
-            for i, ele in enumerate(children_catalogs_eles):
-                print('css_ul=>{}'.format(css_ul))
-                self.get_children_catas(
-                    ele.find_element_by_xpath('//*[@id="zg_browseRoot"]'+css_ul+'/li/a').get_attribute('href'))
-        else:
-            print('{} has no children catalog, self.count=>{}'.format(parent_catalog_name, self.count))
-            return
+        try:
+            element = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, 'zg_browseRoot'))
+            )
+            parent_css_ul = '/ul'*(loop_count-1)
+            css_ul = '/ul'*loop_count
+            # //*[@id="zg_browseRoot"]/li/span
+            print('parent_css_ul=>{}, css_ul=>{}'.format(parent_css_ul, css_ul))
+            parent_catalog_name = element.find_element_by_xpath('//*[@id="zg_browseRoot"]'+parent_css_ul+'/li/span').text.strip()
+            # //*[@id="zg_browseRoot"]/ul/li[1]
+            children_catalogs_eles = element.find_elements_by_xpath('//*[@id="zg_browseRoot"]'+css_ul+'/li')
+            print('{} has {} children catalog, loop_count=>{}'.format(parent_catalog_name, len(children_catalogs_eles), loop_count))
+            if len(children_catalogs_eles):
+                text_href_dict = dict()
+                for i, ele in enumerate(children_catalogs_eles):
+                    # href = ele.find_element_by_xpath('//*[@id="zg_browseRoot"]'+css_ul+'/li[' + str((i+1)) + ']/a')
+                    # .get_attribute('href')
+                    text_href_dict.update({ele.text: ele.find_element_by_tag_name('a').get_attribute('href')})
+                    print('href_list => {}'.format(text_href_dict))
+                for text, href in text_href_dict.items():
+                    print('css_ul=>{}, ele node is => {}, href=>{}'.format(css_ul, text, href))
+                    self.get_children_catas(href, loop_count+1)
+            else:
+                print('{} has no children catalog, loop_count=>{}'.format(parent_catalog_name, loop_count))
+                return
+        except Exception as e:
+            print('error => {}'.format(e))
+        finally:
+            print('get the nodes')
 
     def get_catalogs(self, url):
         """
@@ -134,5 +149,5 @@ if __name__ == '__main__':
     # url = 'https://www.amazon.com/Best-Sellers/zgbs/amazon-devices/ref=zg_bs_unv_1_17045325011_2'
     start = int(time.time()) * 1000
     esales = Esales(url, "selenium")
-    esales.get_children_catas(url)
+    esales.get_children_catas(url, esales.count+1)
     print('cost time => {}ms'.format((int(time.time()) * 1000) - start))
