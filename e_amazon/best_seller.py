@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 import random
+
+import datetime
 from selenium.webdriver.support import expected_conditions as EC
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 import time
-from bs4 import BeautifulSoup
-import requests
+import csv
 from selenium.webdriver.support.wait import WebDriverWait
 
 from e_amazon.craw_constant import headers_list
@@ -30,13 +31,20 @@ class Catalog(object):
 
 
 class Esales(object):
-    def __init__(self, url, send_tools):
+    def __init__(self, url, title, max_limit):
         self.url = url
-        self.send_tools = send_tools
-        self.catalogs = set()
-        self.count = 0
+        self.csv_file_name = str(datetime.datetime.now()).replace(":", "_").strip().replace(" ", "_").split(".")[0]
+        self.title_list = title
+        self.max_limit = max_limit
+        try:
+            with open("{}.csv".format(self.csv_file_name), 'w', encoding='utf-8', newline='') as f:
+                f_csv = csv.DictWriter(f, self.title_list)
+                f_csv.writeheader()
+                print('create csv file and header success.')
+        except Exception as e:
+            print(e)
 
-    def get_children_catas(self, parent_url, loop_count):
+    def children_catalog(self, parent_url):
         print('parent_url=>{}'.format(parent_url))
         driver.get(parent_url)
         for i in range(8):
@@ -49,93 +57,113 @@ class Esales(object):
             element = WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.ID, 'zg_browseRoot'))
             )
-            parent_css_ul = '/ul'*(loop_count-1)
-            css_ul = '/ul'*loop_count
-            # //*[@id="zg_browseRoot"]/li/span
+            try:
+                eles = element.find_elements_by_class_name("zg_browseUp")
+                loop_count = len(eles)
+            except:
+                loop_count = 0
+            parent_css_ul = '/ul'*loop_count
+            css_ul = '/ul'*(loop_count+1)
             print('parent_css_ul=>{}, css_ul=>{}'.format(parent_css_ul, css_ul))
-            parent_catalog_name = element.find_element_by_xpath('//*[@id="zg_browseRoot"]'+parent_css_ul+'/li/span').text.strip()
-            # //*[@id="zg_browseRoot"]/ul/li[1]
-            children_catalogs_eles = element.find_elements_by_xpath('//*[@id="zg_browseRoot"]'+css_ul+'/li')
+            # https://www.amazon.com/Best-Sellers-Fire-TV/zgbs/amazon-devices/8521791011/ref=zg_bs_nav_2_2102313011
+            # 非叶子节点，当前选中节点的页面，span.zg_selected
+            # //*[@id="zg_browseRoot"]/ul/ul/ul/li/span
+            # 其子节点：
+            # //*[@id="zg_browseRoot"]/ul/ul/ul/ul/li
+            # 父节点：
+            # //*[@id="zg_browseRoot"]/ul/ul/li/a
+
+            # 叶子
+            # //*[@id="zg_browseRoot"]/ul/ul/ul/li[4]/span
+            # 父节点：
+            # //*[@id="zg_browseRoot"]/ul/ul/li/a
+            try:
+                parent_catalog_name = element.find_element_by_xpath('//*[@id="zg_browseRoot"]'+parent_css_ul+'/li/span').text.strip()
+                children_catalogs_eles = element.find_elements_by_xpath('//*[@id="zg_browseRoot"]'+css_ul+'/li')
+            except:
+                children_catalogs_eles = []
             print('{} has {} children catalog, loop_count=>{}'.format(parent_catalog_name, len(children_catalogs_eles), loop_count))
+            children_list = []
             if len(children_catalogs_eles):
-                text_href_dict = dict()
-                for i, ele in enumerate(children_catalogs_eles):
-                    # href = ele.find_element_by_xpath('//*[@id="zg_browseRoot"]'+css_ul+'/li[' + str((i+1)) + ']/a')
-                    # .get_attribute('href')
-                    text_href_dict.update({ele.text: ele.find_element_by_tag_name('a').get_attribute('href')})
-                    print('href_list => {}'.format(text_href_dict))
-                for text, href in text_href_dict.items():
-                    print('css_ul=>{}, ele node is => {}, href=>{}'.format(css_ul, text, href))
-                    self.get_children_catas(href, loop_count+1)
-            else:
-                print('{} has no children catalog, loop_count=>{}'.format(parent_catalog_name, loop_count))
-                return
+                for ele in children_catalogs_eles:
+                    catalog_name = ele.text
+                    href = ele.find_element_by_tag_name('a').get_attribute('href')
+                    catalog = Catalog(catalog_name, href, parent_catalog_name)
+                    children_list.append(catalog)
+            return children_list
         except Exception as e:
             print('error => {}'.format(e))
-        finally:
-            print('get the nodes')
+            return None
 
-    def get_catalogs(self, url):
-        """
-        获取所有品类
-        :param url url of the get all catalogs
-        :return:
-        """
-        all_catalogs_eles = set()
-
-        # get catalogs_url catalogs
-        driver.get(url)
-        time.sleep(random.choice([1, 2, 3]))
-        catalogs_eles = driver.find_elements_by_css_selector(
-            '#zg_browseRoot > ul > li')
-
-        if len(catalogs_eles) == 1:
-            catalog_ele = catalogs_eles[0]
-            catalog = Catalog(parent_catalog_name=catalog_ele.text)
-            child_catalogs_eles = catalog_ele.find_elements_by_xpath('//*[@id="zg_browseRoot"]/ul/ul/li')
-            print('{} has {} children catalog'.format(catalog.parent_catalog_name, len(child_catalogs_eles)))
-            for ele in child_catalogs_eles:
-                if self.filter_href(ele):
-                    catalog.catalog_name = ele.text
-                    catalog.catalog_url = ele.find_element_by_tag_name('a').get_attribute('href')
-                    all_catalogs_eles.add(catalog)
-                    self.get_catalogs(catalog.catalog_url)
-        elif len(catalogs_eles) > 1:
-            print('all has {} children catalog'.format(len(catalogs_eles)))
-            for ele in catalogs_eles:
-                if self.filter_href(ele):
-                    all_catalogs_eles.add(Catalog(catalog_name=ele.text, catalog_url=ele.find_element_by_tag_name('a').get_attribute('href')))
-                    self.get_catalogs(ele.find_element_by_tag_name('a').get_attribute('href'))
+    def all_catalog(self, url):
+        children_list = self.children_catalog(url)
+        if children_list and len(children_list):
+            for cata in children_list:
+                self.sales(cata)
+                self.all_catalog(cata.catalog_url)
         else:
-            print('no children catalogs')
             return
-        self.catalogs = all_catalogs_eles
 
-    def get_content(self):
-        if self.send_tools != 'selenium':
-            print('use {} craw data'.format(self.send_tools))
-            # use requests and beautifulSoup
-            html = requests.get(self.url, headers=header)
-            soup = BeautifulSoup(html.content, "html.parser")
-            products_divs = soup.select("span.a-icon-alt")
-            for product_div in products_divs:
-                ele = product_div.string
-                print(ele)
-        else:
-            # use selenium
-            print('use {} craw data..'.format(self.send_tools))
-            driver.get(url)
-            for i in range(8):
-                js = "window.scrollTo(0,{})".format(i * 1000)
+
+    def sales(self, catalog):
+        # order by sale desc
+        href = catalog.catalog_url
+        driver.get(href)
+        # get the no.1 page products data
+        for i in range(10):
+            js = "window.scrollTo(0,{})".format(i * 800)
+            try:
+                driver.execute_script(js)
+            except:
+                pass
+        try:
+            element = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, 'zg-ordered-list'))
+            )
+            products_divs = element.find_elements_by_xpath('//*[@id="zg-ordered-list"]/li')
+            length = len(products_divs)
+            print('find page one products number {}'.format(length))
+            if length > self.max_limit:
+                products_divs = products_divs[0:self.max_limit]
+            for index, product_div in enumerate(products_divs):
+                row_dict = {}.fromkeys(['parent_catalog_name', 'catalog_name', 'product_name', 'product_url',
+                                        'product_stars', 'product_reviews', 'price', 'pic_url'], '----')
+                row_dict['parent_catalog_name'] = catalog.parent_catalog_name
+                row_dict['catalog_name'] = catalog.catalog_name
+
                 try:
-                    driver.execute_script(js)
+                    row_dict['product_name'] = product_div.find_element_by_xpath('//*[@id="zg-ordered-list"]/li[' + str(index+1) + ']/span/div/span/a/div').get_attribute('textContent')
                 except:
                     pass
-            products_divs = driver.find_elements_by_xpath('//*[@id="zg-ordered-list"]/li')
-            print('length=%s' % len(products_divs))
-            for product_div in products_divs:
-                print(product_div.text)
-            driver.close()
+                try:
+                    row_dict['product_url'] = product_div.find_element_by_xpath('//*[@id="zg-ordered-list"]/li[' + str(index+1) + ']/span/div/span/a').get_attribute('href')
+                except:
+                    pass
+                try:
+                    row_dict['product_stars'] = product_div.find_element_by_xpath('//*[@id="zg-ordered-list"]/li[' + str(index+1) + ']/span/div/span/div[1]/a[1]/i/span').get_attribute('textContent')
+                except:
+                    pass
+                try:
+                    row_dict['product_reviews'] = product_div.find_element_by_xpath('//*[@id="zg-ordered-list"]/li[' + str(index+1) + ']/span/div/span/div[1]/a[2]').get_attribute('textContent')
+                except:
+                    row_dict['product_reviews'] = 0
+                try:
+                    row_dict['price'] = product_div.find_element_by_xpath('//*[@id="zg-ordered-list"]/li[' + str(index+1) + ']/span/div/span/div[2]/a/span/span').get_attribute('textContent')
+                except:
+                    pass
+                try:
+                    row_dict['pic_url'] = product_div.find_element_by_xpath('//*[@id="zg-ordered-list"]/li[' + str(index+1) + ']/span/div/span/a/span/div/img').get_attribute('src')
+                except:
+                    pass
+                try:
+                    with open("{}.csv".format(self.csv_file_name), 'a+', encoding='utf-8', newline='') as f:
+                        f_csv = csv.DictWriter(f, self.title_list)
+                        f_csv.writerow(row_dict)
+                except Exception as e:
+                    print(e)
+        except Exception as e:
+            print(e)
+
 
     def filter_href(self, ele):
         if ele:
@@ -146,8 +174,8 @@ class Esales(object):
 
 if __name__ == '__main__':
     url = 'https://www.amazon.com/Best-Sellers/zgbs'
-    # url = 'https://www.amazon.com/Best-Sellers/zgbs/amazon-devices/ref=zg_bs_unv_1_17045325011_2'
     start = int(time.time()) * 1000
-    esales = Esales(url, "selenium")
-    esales.get_children_catas(url, esales.count+1)
+    title = ['parent_catalog_name', 'catalog_name', 'product_name', 'product_url', 'product_reviews', 'product_stars', 'price', 'pic_url']
+    esales = Esales(url, title, 20)
+    esales.all_catalog(url)
     print('cost time => {}ms'.format((int(time.time()) * 1000) - start))
