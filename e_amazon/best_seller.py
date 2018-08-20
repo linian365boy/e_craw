@@ -9,9 +9,44 @@ from selenium.webdriver.common.by import By
 import time
 import csv
 from selenium.webdriver.support.wait import WebDriverWait
-
 from e_amazon.craw_constant import headers_list
+import logging
+from logging.config import dictConfig
 
+logging_config = dict(
+	version=1,
+	formatters={
+		'f': {
+			'format':
+				'%(asctime)s %(name)-10s %(lineno)d %(process)d %(thread)d %(threadName)s %(levelname)-8s %('
+		                'message)s'}
+	},
+	handlers={
+		'h': {'class': 'logging.FileHandler',
+		      'filename': 'logging.log',
+		      'formatter': 'f',
+		      'level': logging.INFO
+		      },
+		'console': {
+			'class': 'logging.StreamHandler',
+			'level': 'DEBUG',
+			'formatter': 'f'
+		}
+	},
+	loggers={
+		'root': {
+			'handlers': ['console'],
+			'level': 'INFO',
+			# 'propagate': True,
+		},
+		'simple': {
+			'handlers': ['console', 'h'],
+			'level': 'INFO',
+		}
+	}
+)
+dictConfig(logging_config)
+logger = logging.getLogger('simple')
 
 chrome_options = Options()
 # define headless
@@ -19,6 +54,8 @@ chrome_options.add_argument("--headless")
 driver = webdriver.Chrome(chrome_options=chrome_options)
 header = random.choice(headers_list)
 
+per_file_max_line = 20
+per_file_init_line = 0
 
 class Catalog(object):
     def __init__(self, catalog_name='----', catalog_url='not found', parent_catalog_name='--'):
@@ -36,16 +73,18 @@ class Esales(object):
         self.csv_file_name = str(datetime.datetime.now()).replace(":", "_").strip().replace(" ", "_").split(".")[0]
         self.title_list = title
         self.max_limit = max_limit
+        self.per_file_init_line = per_file_init_line
+
         try:
             with open("{}.csv".format(self.csv_file_name), 'w', encoding='utf-8', newline='') as f:
                 f_csv = csv.DictWriter(f, self.title_list)
                 f_csv.writeheader()
-                print('create csv file and header success.')
+                logger.info('create csv file and header success.')
         except Exception as e:
-            print(e)
+            logger.info(e)
 
     def children_catalog(self, parent_url):
-        print('parent_url=>{}'.format(parent_url))
+        logger.info('parent_url=>{}'.format(parent_url))
         driver.get(parent_url)
         for i in range(8):
             js = "window.scrollTo(0,{})".format(i * 1000)
@@ -64,7 +103,7 @@ class Esales(object):
                 loop_count = 0
             parent_css_ul = '/ul'*loop_count
             css_ul = '/ul'*(loop_count+1)
-            print('parent_css_ul=>{}, css_ul=>{}'.format(parent_css_ul, css_ul))
+            logger.info('parent_css_ul=>{}, css_ul=>{}'.format(parent_css_ul, css_ul))
             # https://www.amazon.com/Best-Sellers-Fire-TV/zgbs/amazon-devices/8521791011/ref=zg_bs_nav_2_2102313011
             # 非叶子节点，当前选中节点的页面，span.zg_selected
             # //*[@id="zg_browseRoot"]/ul/ul/ul/li/span
@@ -82,7 +121,7 @@ class Esales(object):
                 children_catalogs_eles = element.find_elements_by_xpath('//*[@id="zg_browseRoot"]'+css_ul+'/li')
             except:
                 children_catalogs_eles = []
-            print('{} has {} children catalog, loop_count=>{}'.format(parent_catalog_name, len(children_catalogs_eles), loop_count))
+            logger.info('{} has {} children catalog, loop_count=>{}'.format(parent_catalog_name, len(children_catalogs_eles), loop_count))
             children_list = []
             if len(children_catalogs_eles):
                 for ele in children_catalogs_eles:
@@ -92,7 +131,7 @@ class Esales(object):
                     children_list.append(catalog)
             return children_list
         except Exception as e:
-            print('error => {}'.format(e))
+            logger.info('error => {}'.format(e))
             return None
 
     def all_catalog(self, url):
@@ -122,7 +161,7 @@ class Esales(object):
             )
             products_divs = element.find_elements_by_xpath('//*[@id="zg-ordered-list"]/li')
             length = len(products_divs)
-            print('find page one products number {}'.format(length))
+            logger.info('find page one products number {}'.format(length))
             if length > self.max_limit:
                 products_divs = products_divs[0:self.max_limit]
             for index, product_div in enumerate(products_divs):
@@ -156,13 +195,26 @@ class Esales(object):
                 except:
                     pass
                 try:
-                    with open("{}.csv".format(self.csv_file_name), 'a+', encoding='utf-8', newline='') as f:
-                        f_csv = csv.DictWriter(f, self.title_list)
-                        f_csv.writerow(row_dict)
+                    if self.per_file_init_line <= per_file_max_line:
+                        with open("{}.csv".format(self.csv_file_name), 'a+', encoding='utf-8', newline='') as f:
+                            f_csv = csv.DictWriter(f, self.title_list)
+                            f_csv.writerow(row_dict)
+                            self.per_file_init_line += 1
+                    else:
+                        try:
+                            self.csv_file_name = str(datetime.datetime.now()).replace(":", "_").strip().replace(" ", "_").split(".")[0]
+                            with open("{}.csv".format(self.csv_file_name), 'w', encoding='utf-8', newline='') as f:
+                                f_csv = csv.DictWriter(f, self.title_list)
+                                f_csv.writeheader()
+                                f_csv.writerow(row_dict)
+                                self.per_file_init_line = 1
+                                logger.info('create another csv file and header success.')
+                        except Exception as e:
+                            logger.info(e)
                 except Exception as e:
-                    print(e)
+                    logger.info(e)
         except Exception as e:
-            print(e)
+            logger.info(e)
 
 
     def filter_href(self, ele):
@@ -178,4 +230,4 @@ if __name__ == '__main__':
     title = ['parent_catalog_name', 'catalog_name', 'product_name', 'product_url', 'product_reviews', 'product_stars', 'price', 'pic_url']
     esales = Esales(url, title, 20)
     esales.all_catalog(url)
-    print('cost time => {}ms'.format((int(time.time()) * 1000) - start))
+    logger.info('cost time => {}ms'.format((int(time.time()) * 1000) - start))
