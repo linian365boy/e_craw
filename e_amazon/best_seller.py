@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-import random
-
 import datetime
 from selenium.webdriver.support import expected_conditions as EC
 from selenium import webdriver
@@ -9,7 +7,6 @@ from selenium.webdriver.common.by import By
 import time
 import csv
 from selenium.webdriver.support.wait import WebDriverWait
-from e_amazon.craw_constant import headers_list
 import logging
 from logging.config import dictConfig
 
@@ -55,9 +52,8 @@ chrome_options.add_argument('--no-sandbox')
 chrome_options.add_argument('--disable-gpu')
 chrome_options.add_argument('--disable-dev-shm-usage')
 driver = webdriver.Chrome(chrome_options=chrome_options)
-header = random.choice(headers_list)
 
-per_file_max_line = 20
+per_file_max_line = 20000
 per_file_init_line = 0
 
 class Catalog(object):
