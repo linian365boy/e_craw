@@ -83,6 +83,22 @@ class Esales(object):
             logger.info(e)
 
     def children_catalog(self, parent_url):
+        """
+		# https://www.amazon.com/Best-Sellers-Fire-TV/zgbs/amazon-devices/8521791011/ref=zg_bs_nav_2_2102313011
+		# 非叶子节点，当前选中节点的页面，span.zg_selected
+		# //*[@id="zg_browseRoot"]/ul/ul/ul/li/span
+		# 其子节点：
+		# //*[@id="zg_browseRoot"]/ul/ul/ul/ul/li
+		# 父节点：
+		# //*[@id="zg_browseRoot"]/ul/ul/li/a
+
+		# 叶子
+		# //*[@id="zg_browseRoot"]/ul/ul/ul/li[4]/span
+		# 父节点：
+		# //*[@id="zg_browseRoot"]/ul/ul/li/a
+		:param parent_url:
+		:return:
+		"""
         logger.info('parent_url=>{}'.format(parent_url))
         driver.get(parent_url)
         for i in range(8):
@@ -103,22 +119,14 @@ class Esales(object):
             parent_css_ul = '/ul'*loop_count
             css_ul = '/ul'*(loop_count+1)
             logger.info('parent_css_ul=>{}, css_ul=>{}'.format(parent_css_ul, css_ul))
-            # https://www.amazon.com/Best-Sellers-Fire-TV/zgbs/amazon-devices/8521791011/ref=zg_bs_nav_2_2102313011
-            # 非叶子节点，当前选中节点的页面，span.zg_selected
-            # //*[@id="zg_browseRoot"]/ul/ul/ul/li/span
-            # 其子节点：
-            # //*[@id="zg_browseRoot"]/ul/ul/ul/ul/li
-            # 父节点：
-            # //*[@id="zg_browseRoot"]/ul/ul/li/a
-
-            # 叶子
-            # //*[@id="zg_browseRoot"]/ul/ul/ul/li[4]/span
-            # 父节点：
-            # //*[@id="zg_browseRoot"]/ul/ul/li/a
             try:
                 parent_catalog_name = element.find_element_by_xpath('//*[@id="zg_browseRoot"]'+parent_css_ul+'/li/span').text.strip()
                 children_catalogs_eles = element.find_elements_by_xpath('//*[@id="zg_browseRoot"]'+css_ul+'/li')
             except:
+                try:
+                    parent_catalog_name = element.find_element_by_class_name('zg_selected').text
+                except:
+                    parent_catalog_name = '----'
                 children_catalogs_eles = []
             logger.info('{} has {} children catalog, loop_count=>{}'.format(parent_catalog_name, len(children_catalogs_eles), loop_count))
             children_list = []
