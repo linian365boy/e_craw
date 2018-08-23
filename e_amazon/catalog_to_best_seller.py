@@ -73,6 +73,7 @@ class Esales(object):
         self.title_list = title
         self.max_limit = max_limit
         self.per_file_init_line = per_file_init_line
+        self.filter_categories = set()
 
         try:
             with open("{}.csv".format(self.csv_file_name), 'w', encoding='utf-8', newline='') as f:
@@ -224,13 +225,14 @@ class Esales(object):
             logger.info(e)
 
 
-    def filter_href(self, ele):
-        if ele:
+    def filter_href(self, category_name):
+        if category_name in self.filter_categories:
             return True
         else:
             return False
 
     def leaf_node(self, url):
+        leaf_node = False
         logger.info('parent_url=>{}'.format(url))
         driver.get(url)
         for i in range(8):
@@ -251,11 +253,13 @@ class Esales(object):
             parent_css_ul = '/ul' * loop_count
             css_ul = '/ul' * (loop_count + 1)
             logger.info('parent_css_ul=>{}, css_ul=>{}'.format(parent_css_ul, css_ul))
+            enter_try_catch = False
             try:
                 parent_catalog_name = element.find_element_by_xpath(
                     '//*[@id="zg_browseRoot"]' + parent_css_ul + '/li/span').text.strip()
-                children_catalogs_eles = element.find_elements_by_xpath('//*[@id="zg_browseRoot"]' + css_ul + '/li')
+                children_catalogs_eles = element.find_elements_by_xpath('//*[@id="zg_browseRoot"]'+css_ul+'/li')
             except:
+                enter_try_catch = True
                 try:
                     parent_catalog_name = element.find_element_by_class_name('zg_selected').text
                 except:
@@ -263,11 +267,16 @@ class Esales(object):
                     children_catalogs_eles = []
             logger.info('{} has {} children catalog, loop_count=>{}'.format(parent_catalog_name, len(children_catalogs_eles),
                                                                 loop_count))
-            catalog = Catalog(parent_catalog_name, url, parent_catalog_name)
-            self.sales(catalog)
+            if enter_try_catch and parent_catalog_name != '----':
+                catalog_name = parent_catalog_name
+                parent_catalog_name = element.find_element_by_xpath('//*[@id="zg_browseRoot"]'+parent_css_ul+'/li').text.strip()
+                catalog = Catalog(catalog_name, url, parent_catalog_name)
+                self.sales(catalog)
+                leaf_node = True
+                self.filter_categories.add(catalog_name)
         except Exception as e:
             logger.info('error => {}'.format(e))
-            return None
+        return leaf_node
 
 
 if __name__ == '__main__':
@@ -277,6 +286,11 @@ if __name__ == '__main__':
     start = int(time.time()) * 1000
     title = ['parent_catalog_name', 'catalog_name', 'product_name', 'product_url', 'product_reviews', 'product_stars', 'price', 'pic_url']
     esales = Esales(url, title, 20)
-    esales.leaf_node(url)
+    if esales.leaf_node(url):
+        logger.info('I am leaf node.')
+        pass
+    else:
+        logger.info('I am not leaf node.')
+        pass
     esales.all_catalog(url)
     logger.info('cost time => {}ms'.format((int(time.time()) * 1000) - start))
