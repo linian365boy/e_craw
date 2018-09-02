@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 import datetime
+import traceback
+
 from selenium.webdriver.support import expected_conditions as EC
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -83,7 +85,7 @@ class Esales(object):
                 f_csv.writeheader()
                 logger.info('create csv file and header success.')
         except Exception as e:
-            logger.info(e)
+            logger.error(traceback.format_exc())
 
     def children_catalog(self, parent_url):
         """
@@ -146,7 +148,7 @@ class Esales(object):
                     children_list.append(catalog)
             return children_list
         except Exception as e:
-            logger.info('error => {}'.format(e))
+            logger.error('error => {}'.format(traceback.format_exc()))
             return None
 
     def all_catalog(self, url):
@@ -234,11 +236,11 @@ class Esales(object):
                                 self.per_file_init_line = 1
                                 logger.info('create another csv file and header success.')
                         except Exception as e:
-                            logger.info(e)
+                            logger.error(traceback.format_exc())
                 except Exception as e:
-                    logger.info(e)
+                    logger.error(traceback.format_exc())
         except Exception as e:
-            logger.info(e)
+            logger.error(traceback.format_exc())
 
     def filter_href(self, category_name):
         if category_name in self.filter_categories:
@@ -269,6 +271,7 @@ class Esales(object):
             css_ul = '/ul' * (loop_count + 1)
             logger.info('parent_css_ul=>{}, css_ul=>{}'.format(parent_css_ul, css_ul))
             enter_try_catch = False
+            children_catalogs_eles = []
             try:
                 parent_catalog_name = element.find_element_by_xpath(
                     '//*[@id="zg_browseRoot"]' + parent_css_ul + '/li/span').text.strip()
@@ -285,16 +288,16 @@ class Esales(object):
                                                                     loop_count))
             if enter_try_catch and parent_catalog_name != '----':
                 catalog_name = parent_catalog_name
-                parent_catalog_name = element.find_element_by_xpath(
+                parent_catalog_name = driver.find_element_by_xpath(
                     '//*[@id="zg_browseRoot"]' + parent_css_ul + '/li').text.strip()
                 catalog = Catalog(catalog_name, url, parent_catalog_name)
                 self.sales(catalog)
                 leaf_node = True
-                parent_url = element.find_element_by_xpath('//*[@id="zg_browseRoot"]' + parent_css_ul + '/li/a')\
+                parent_url = driver.find_element_by_xpath('//*[@id="zg_browseRoot"]' + parent_css_ul + '/li/a')\
                     .get_attribute('href')
                 self.filter_all_categories(parent_url, catalog_name)
         except Exception as e:
-            logger.info('error => {}'.format(e))
+            logger.error('error => {}'.format(traceback.format_exc()))
         return leaf_node
 
     def filter_all_categories(self, parent_url, category_name):
@@ -317,12 +320,14 @@ class Esales(object):
             parent_css_url = '/ul' * (loop_count-1)
             css_ul = '/ul' * (loop_count + 1)
             logger.info('css_ul=>{}'.format(css_ul))
-            sibling_nodes = element.find_element_by_xpath('//*[@id="zg_browseRoot"]' + css_ul + '/li')
-            for index, node in enumerate(sibling_nodes):
+            sibling_nodes = element.find_elements_by_xpath('//*[@id="zg_browseRoot"]' + css_ul + '/li')
+            index = 0
+            for node in sibling_nodes:
+                index += 1
                 if node.text.strip() != category_name:
                     self.filter_categories.add(node.text.strip())
                 else:
-                    if index == len(sibling_nodes) - 1:
+                    if index == len(sibling_nodes):
                         parent_name = element.find_element_by_xpath('//*[@id="zg_browseRoot"]' + parent_css_url + '/li').text.strip()
                         self.filter_categories.add(parent_name)
                     break
@@ -332,14 +337,14 @@ class Esales(object):
                 catalog_name = element.find_element_by_class_name('zg_selected').text
                 self.filter_all_categories(parent_url, catalog_name)
             except Exception as e:
-                logger.info('find root node, {} is root node {}'.format(category_name, e))
+                logger.error('find root node, {} is root node {}'.format(category_name, traceback.format_exc()))
                 for node in sibling_nodes:
                     if node.text.strip() not in self.filter_categories:
                         href = node.find_element_by_tag_name('a').get_attribute('href')
                         catalog = Catalog(node.text.strip(), href, category_name)
                         self.next_categories.append(catalog)
         except Exception as e:
-            logger.info('error => {}'.format(e))
+            logger.error('error => {}'.format(traceback.format_exc()))
 
     def leaf_node(self, cata):
         driver.get(cata.catalog_url)
@@ -357,13 +362,12 @@ class Esales(object):
             catalog = Catalog(catalog_name, cata.catalog_url, cata.parent_catalog_name)
             self.sales(catalog)
         except Exception as e:
-            logger.info('error => {}'.format(e))
+            logger.error('error => {}'.format(traceback.format_exc()))
 
 
 if __name__ == '__main__':
-    # url = 'https://www.amazon.com/Best-Sellers-Books-Foreign-International-Law/zgbs/books/10898/ref
-    # =zg_bs_nav_b_2_10777'
-    url = 'https://www.amazon.com/Best-Sellers-Beauty/zgbs/beauty/ref=zg_bs_unv_bt_1_11057131_1'
+    url = 'https://www.amazon.com/Best-Sellers-Books-Foreign-International-Law/zgbs/books/10898/ref=zg_bs_nav_b_2_10777'
+    # url = 'https://www.amazon.com/Best-Sellers-Beauty/zgbs/beauty/ref=zg_bs_unv_bt_1_11057131_1'
     start = int(time.time()) * 1000
     title = ['parent_catalog_name', 'catalog_name', 'product_name', 'product_url', 'product_reviews', 'product_stars',
              'price', 'pic_url']
@@ -373,7 +377,8 @@ if __name__ == '__main__':
         pass
     else:
         logger.info('I am not leaf node. => {}'.format(url))
-
+    logger.info('next categories length =>{}'.format(len(esales.next_categories)))
     for node in esales.next_categories:
+        logger.info('current node name => {}'.format(node.catalog_name))
         esales.all_catalog(node.catalog_url)
     logger.info('cost time => {}ms'.format((int(time.time()) * 1000) - start))
